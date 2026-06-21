@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  threadsmith-api:
+    build: .
+    container_name: threadsmith-api
+    ports:
+      - "8021:8021"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - AGENTOSINTERNAL_SERVICE_TOKEN=${AGENTOSINTERNAL_SERVICE_TOKEN}
+      - REDIS_URL=redis://redis:6379/1
+      - POSTGRES_URL=postgresql://agentos:secret@postgres:5432/threadsmith
+      # Placeholders for Production Webhook Verification
+      - ZENDESK_API_TOKEN=${ZENDESK_API_TOKEN:-}
+      - INTERCOM_ACCESS_TOKEN=${INTERCOM_ACCESS_TOKEN:-}
+    depends_on:
+      - redis
+      - postgres
+
+  threadsmith-worker:
+    build: .
+    container_name: threadsmith-worker
+    command: celery -A worker.celery_app worker --loglevel=info
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - REDIS_URL=redis://redis:6379/1
+      - POSTGRES_URL=postgresql://agentos:secret@postgres:5432/threadsmith
+    depends_on:
+      - redis
+      - postgres
+
+  threadsmith-beat:
+    build: .
+    container_name: threadsmith-beat
+    command: celery -A worker.celery_app beat --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/1
+      - POSTGRES_URL=postgresql://agentos:secret@postgres:5432/threadsmith
+    depends_on:
+      - redis
+      - postgres
+      - threadsmith-worker
+
+  # Shared AgentOS Infra (Mocked for ThreadSmith specific compose)
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=agentos
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=threadsmith
+    ports:
+      - "5432:5432"
